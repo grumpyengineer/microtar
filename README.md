@@ -63,7 +63,7 @@ Defining `NO_STDIO` will remove all the functions that use file IO.   Saves some
 Reading a tar file from a memory buffer is exactly the same as before except you open the tar using
 
 ```c
-mtar_open_mem(&tar, &tarBuffer, 'r')
+mtar_open_mem(&tar, &tarBuffer, "r")
 ```
 
 where tarBuffer is a pointer to the start of the data
@@ -82,7 +82,7 @@ const char *str1 = "Hello world";
 const char *str2 = "Goodbye world";
 
 /* Open archive for writing using memory buffer */
-mtar_open_mem(&tar, tarBuffer, 'w');
+mtar_open_mem(&tar, tarBuffer, "w");
 
 /* Write strings to files `test1.txt` and `test2.txt` */
 mtar_write_file_header(&tar, "test1.txt", strlen(str1));
