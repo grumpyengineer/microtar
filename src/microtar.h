@@ -16,7 +16,11 @@ extern "C"
 #include <stdio.h>
 #include <stdlib.h>
 
-#define MTAR_VERSION "0.1.0"
+#define MTAR_VERSION "0.2.0"
+
+#define NO_STDIO
+
+#define ALLOC_SIZE	256
 
 enum {
   MTAR_ESUCCESS     =  0,
@@ -59,15 +63,20 @@ struct mtar_t {
   int (*seek)(mtar_t *tar, unsigned pos);
   int (*close)(mtar_t *tar);
   void *stream;
+  void **buffer;
   unsigned pos;
   unsigned remaining_data;
   unsigned last_header;
+  unsigned allocated;
 };
 
 
 const char* mtar_strerror(int err);
 
+#ifndef NO_STDIO
 int mtar_open(mtar_t *tar, const char *filename, const char *mode);
+#endif
+int mtar_open_mem(mtar_t *tar, unsigned char **data, const char mode);
 int mtar_close(mtar_t *tar);
 
 int mtar_seek(mtar_t *tar, unsigned pos);
@@ -82,6 +91,11 @@ int mtar_write_file_header(mtar_t *tar, const char *name, unsigned size);
 int mtar_write_dir_header(mtar_t *tar, const char *name);
 int mtar_write_data(mtar_t *tar, const void *data, unsigned size);
 int mtar_finalize(mtar_t *tar);
+
+int write_null_bytes(mtar_t *tar, int n);
+
+unsigned mtar_mem_size(mtar_t *tar);
+int mtar_get_data_ptr(mtar_t *tar, void **ptr, unsigned size);
 
 #ifdef __cplusplus
 }
