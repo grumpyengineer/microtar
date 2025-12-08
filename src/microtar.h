@@ -18,7 +18,7 @@ extern "C"
 
 #define MTAR_VERSION "0.2.0"
 
-#define NO_STDIO
+#undef NO_STDIO
 
 #define ALLOC_SIZE	256
 
@@ -76,7 +76,7 @@ const char* mtar_strerror(int err);
 #ifndef NO_STDIO
 int mtar_open(mtar_t *tar, const char *filename, const char *mode);
 #endif
-int mtar_open_mem(mtar_t *tar, unsigned char **data, const char mode);
+int mtar_open_mem(mtar_t *tar, unsigned char **data, const char *mode);
 int mtar_close(mtar_t *tar);
 
 int mtar_seek(mtar_t *tar, unsigned pos);

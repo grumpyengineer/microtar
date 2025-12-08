@@ -242,16 +242,18 @@ static int mem_read(mtar_t *tar, void *data, unsigned size)
 
 static int mem_seek(mtar_t *tar, unsigned offset)
 {
+	// Don't actually need to do anything here
+	// The seek is atually done by simply updating tar->pos in the calling function
 	return MTAR_ESUCCESS;
 }
 
 static int mem_close(mtar_t *tar)
 {
-	// Todo, Delete the data?
+	// Don't actually need to do anything here
 	return MTAR_ESUCCESS;
 }
 
-int mtar_open_mem(mtar_t *tar, unsigned char **data, const char mode)
+int mtar_open_mem(mtar_t *tar, unsigned char **data, const char *mode)
 {
 	int err;
 	mtar_header_t h;
@@ -267,7 +269,7 @@ int mtar_open_mem(mtar_t *tar, unsigned char **data, const char mode)
 
 	tar->allocated = 0;
 
-	if(mode == 'r')
+	if(*mode == 'r')
 	{
 		err = mtar_read_header(tar, &h);
 		if (err != MTAR_ESUCCESS)
