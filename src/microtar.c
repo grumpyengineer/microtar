@@ -297,14 +297,11 @@ static int linear_stream_read(mtar_t *tar, void *data, unsigned size)
 	return MTAR_ESUCCESS;
 }
 
-int mtar_open_linear_stream(mtar_t *tar, void *write_function, const char *mode)
+int mtar_open_linear_stream(mtar_t *tar, int (*write)(mtar_t *tar, const void *data, unsigned size), const char *mode)
 {
-	int err;
-	mtar_header_t h;
-
 	// Init tar struct and functions
 	memset(tar, 0, sizeof(*tar));
-	tar->write = write_function;
+	tar->write = write;
 	tar->read = linear_stream_read;
 	tar->seek = mem_seek;
 	tar->close = mem_close;

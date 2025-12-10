@@ -91,7 +91,7 @@ const char* mtar_strerror(int err);
 int mtar_open(mtar_t *tar, const char *filename, const char *mode);
 #endif
 int mtar_open_mem(mtar_t *tar, void **data, const char *mode);
-int mtar_open_linear_stream(mtar_t *tar, void *write_function, const char *mode);
+int mtar_open_linear_stream(mtar_t *tar, int (*write)(mtar_t *tar, const void *data, unsigned size), const char *mode);
 int mtar_close(mtar_t *tar);
 
 int mtar_process_linear_data(mtar_t *tar, void **data, unsigned size);
