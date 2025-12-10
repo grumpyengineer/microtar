@@ -184,6 +184,10 @@ int mtar_open(mtar_t *tar, const char *filename, const char *mode) {
   tar->read = file_read;
   tar->seek = file_seek;
   tar->close = file_close;
+  
+  tar->allocated = 0;
+  tar->stream_type = MTAR_SEEKABLE_STREAM;
+  tar->state = MTAR_IDLE;
 
   /* Assure mode is always binary */
   if ( strchr(mode, 'r') ) mode = "rb";
@@ -253,7 +257,7 @@ static int mem_close(mtar_t *tar)
 	return MTAR_ESUCCESS;
 }
 
-int mtar_open_mem(mtar_t *tar, unsigned char **data, const char *mode)
+int mtar_open_mem(mtar_t *tar, void **data, const char *mode)
 {
 	int err;
 	mtar_header_t h;
@@ -264,10 +268,15 @@ int mtar_open_mem(mtar_t *tar, unsigned char **data, const char *mode)
 	tar->read = mem_read;
 	tar->seek = mem_seek;
 	tar->close = mem_close;
+	
+	tar->stream = NULL;
 
-	tar->buffer = (void **)data;
+	tar->buffer = data;
 
 	tar->allocated = 0;
+	
+	tar->stream_type = MTAR_SEEKABLE_STREAM;
+	tar->state = MTAR_IDLE;
 
 	if(*mode == 'r')
 	{
@@ -283,10 +292,180 @@ int mtar_open_mem(mtar_t *tar, unsigned char **data, const char *mode)
 	return MTAR_ESUCCESS;
 }
 
+static int linear_stream_read(mtar_t *tar, void *data, unsigned size)
+{
+	return MTAR_ESUCCESS;
+}
+
+int mtar_open_linear_stream(mtar_t *tar, void *write_function, const char *mode)
+{
+	int err;
+	mtar_header_t h;
+
+	// Init tar struct and functions
+	memset(tar, 0, sizeof(*tar));
+	tar->write = write_function;
+	tar->read = linear_stream_read;
+	tar->seek = mem_seek;
+	tar->close = mem_close;
+	
+	tar->stream = (unsigned char*)malloc(sizeof(mtar_raw_header_t));
+
+	tar->stream_type = MTAR_LINEAR_STREAM;
+	
+	if(*mode == 'r')
+	{
+		tar->state = MTAR_READING_HEADER;
+		tar->remaining_data = sizeof(mtar_raw_header_t);
+	}
+	else
+	{
+		tar->state = MTAR_IDLE; // todo
+	}
+
+	// Return ok
+	return MTAR_ESUCCESS;
+}
+
 int mtar_close(mtar_t *tar) {
   return tar->close(tar);
 }
 
+int mtar_process_linear_data(mtar_t *tar, void **data, unsigned size)
+{
+	int err;
+	unsigned i;
+	unsigned char *header_ptr;
+	mtar_header_t h;
+	
+	// We are reading the header
+	if(tar->state == MTAR_READING_HEADER)
+	{
+		header_ptr = (unsigned char*)tar->stream;
+		
+		// Searching for the next header
+		if(tar->next_header > 0)
+		{
+			if(tar->next_header > size)
+			{
+				tar->next_header -= size;
+				return MTAR_ESUCCESS;
+			}
+			else
+			{
+				i = tar->next_header;
+				tar->pos = tar->next_header;
+				tar->next_header = 0;
+			}
+		}
+		else
+			i = 0;
+					
+		while((tar->allocated < sizeof(mtar_raw_header_t)) && (i < size))
+		{
+			header_ptr[tar->allocated] = ((unsigned char *)(*data))[tar->pos];
+			
+			tar->allocated++;
+			tar->pos++;
+			i++;
+		}
+		
+		if(tar->allocated == sizeof(mtar_raw_header_t))
+		{
+			tar->state = MTAR_READING_DATA;
+			err = mtar_read_header(tar, &h);
+			
+			if (err != MTAR_ESUCCESS)
+			{
+				mtar_close(tar);
+				return err;
+			}
+		
+			tar->next_header = round_up(h.size, 512);
+			tar->remaining_data = size - i;
+			tar->allocated = 0;
+			
+			tar->buffer = (void **)data;
+		}
+		
+		if(i == size)
+			tar->pos = 0;
+	}
+	else
+	{
+		tar->remaining_data = size;
+		tar->pos = 0;
+		tar->buffer = (void **)data;
+	}
+	
+	// Return ok
+	return MTAR_ESUCCESS;	
+}
+
+unsigned mtar_get_linear_data_available(mtar_t *tar)
+{
+	if(tar->state == MTAR_READING_HEADER)
+		return 0;
+	
+	return tar->remaining_data;
+}
+
+unsigned mtar_get_file_data_remaining(mtar_t *tar)
+{
+	if(tar->state == MTAR_READING_HEADER)
+		return 0;
+	
+	return tar->last_header;
+}
+
+unsigned mtar_read_linear_data(mtar_t *tar, void *data, unsigned size)
+{
+	unsigned char *buf = (unsigned char *)*tar->buffer;
+	
+	unsigned read_size;
+	
+	// How much data is left to read?
+	if(tar->remaining_data > size)
+		read_size = size;
+	else
+		read_size = tar->remaining_data;
+	
+	// Read finial part of the file data
+	if(read_size > tar->last_header)
+		read_size = tar->last_header;
+
+	memcpy(data, buf + tar->pos, read_size);
+	
+	tar->pos += read_size;
+	tar->remaining_data -= read_size;
+	tar->last_header -= read_size;
+	tar->next_header -= read_size;
+	
+	// Run out of file data so go back to reading the next header
+	if(tar->last_header == 0)
+	{
+		tar->state = MTAR_READING_HEADER;
+		
+		if(tar->remaining_data > 0)
+		{
+			if(tar->remaining_data > tar->next_header)
+			{
+				tar->remaining_data -= tar->next_header;
+				tar->pos += tar->next_header;
+				tar->next_header = 0;
+
+				mtar_process_linear_data(tar, tar->buffer, tar->remaining_data);
+			}
+			else
+			{
+				tar->next_header -= tar->remaining_data;
+				tar->remaining_data = 0;
+			}
+		}
+	}
+	
+	return read_size;
+}
 
 int mtar_seek(mtar_t *tar, unsigned pos) {
   int err = tar->seek(tar, pos);
@@ -344,6 +523,25 @@ int mtar_find(mtar_t *tar, const char *name, mtar_header_t *h) {
 
 int mtar_read_header(mtar_t *tar, mtar_header_t *h) {
   int err;
+  
+  // Linear stream so just return the current header if available
+  if(tar->stream_type == MTAR_LINEAR_STREAM)
+  {
+	if(tar->state == MTAR_READING_HEADER)
+	{
+	  return MTAR_ENULLRECORD;
+	}
+	else
+	{
+	  err = raw_to_header(h, (mtar_raw_header_t *)tar->stream);
+	
+	  if((err == MTAR_ESUCCESS) && (tar->last_header == 0))
+	    tar->last_header = h->size;
+	
+	  return err;
+	}
+  }
+  
   mtar_raw_header_t rh;
   /* Save header position */
   tar->last_header = tar->pos;

@@ -44,6 +44,17 @@ enum {
   MTAR_TFIFO  = '6'
 };
 
+enum {
+  MTAR_SEEKABLE_STREAM	= '0',
+  MTAR_LINEAR_STREAM	= '1',
+};
+
+enum {
+  MTAR_IDLE				= '0',
+  MTAR_READING_HEADER	= '1',
+  MTAR_READING_DATA		= '2'
+};
+
 typedef struct {
   unsigned mode;
   unsigned owner;
@@ -67,7 +78,10 @@ struct mtar_t {
   unsigned pos;
   unsigned remaining_data;
   unsigned last_header;
+  unsigned next_header;
   unsigned allocated;
+  unsigned stream_type;
+  unsigned state;
 };
 
 
@@ -76,8 +90,14 @@ const char* mtar_strerror(int err);
 #ifndef NO_STDIO
 int mtar_open(mtar_t *tar, const char *filename, const char *mode);
 #endif
-int mtar_open_mem(mtar_t *tar, unsigned char **data, const char *mode);
+int mtar_open_mem(mtar_t *tar, void **data, const char *mode);
+int mtar_open_linear_stream(mtar_t *tar, void *write_function, const char *mode);
 int mtar_close(mtar_t *tar);
+
+int mtar_process_linear_data(mtar_t *tar, void **data, unsigned size);
+unsigned mtar_get_linear_data_available(mtar_t *tar);
+unsigned mtar_get_file_data_remaining(mtar_t *tar);
+unsigned mtar_read_linear_data(mtar_t *tar, void *data, unsigned size);
 
 int mtar_seek(mtar_t *tar, unsigned pos);
 int mtar_rewind(mtar_t *tar);
